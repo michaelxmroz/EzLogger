@@ -196,7 +196,7 @@ namespace Logger
 #pragma warning( push )
 #pragma warning( disable : 4702 ) //disable unreachable code warning caused by the constexpr ifs
     template <LogSeverity severity, LogVerbosity verbosity, class output>
-    class Logger
+    class SubLogger
     {
     public:
         template <LogLevel level>
@@ -258,9 +258,9 @@ namespace Logger
  The DefaultLogger is used by the default LOG_ macros.
  */
  //----------------------------------//
-    typedef Logger<LogSeverity::All, LogVerbosity::All, VSDebugOutput> VSLogger;
-    typedef Logger<LogSeverity::All, LogVerbosity::All, ConsoleOutput> ConsoleLogger;
-    typedef Logger<LogSeverity::Errors, LogVerbosity::All, FileOutput> FileLogger;
+    typedef SubLogger<LogSeverity::All, LogVerbosity::All, VSDebugOutput> VSLogger;
+    typedef SubLogger<LogSeverity::All, LogVerbosity::All, ConsoleOutput> ConsoleLogger;
+    typedef SubLogger<LogSeverity::Errors, LogVerbosity::All, FileOutput> FileLogger;
     typedef CompoundLogger<VSLogger, ConsoleLogger, FileLogger> DefaultLogger;
 }
 

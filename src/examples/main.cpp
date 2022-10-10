@@ -32,4 +32,9 @@ int main(int argc, char* argv[])
 	}
 
 	LOG_INFO("There is some info here...");
+
+	using namespace Logger;
+	typedef SubLogger<LogSeverity::All, LogVerbosity::Minimal, FileOutput> MyFileLogger;
+
+	MyFileLogger::Log<LogLevel::Warning>("testwarning", "", 4);
 }

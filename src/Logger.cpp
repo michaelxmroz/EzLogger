@@ -47,7 +47,7 @@ void Logger::Logging_Helpers::LocklessRingBuffer::Push(const EzString& message)
     bool oldVal = false;
     if (!m_readable[writeIndex].compare_exchange_strong(oldVal, true))
     {
-        assert("File message buffer overflow in logging system. Consider increasing buffer size", false);
+        assert(((void)"File message buffer overflow in logging system. Consider increasing buffer size", false));
     }
 }
 
@@ -79,7 +79,7 @@ void Logger::Logging_Helpers::ConsoleOut(const char* message)
 std::unique_ptr<Logger::FileOutput> Logger::FileOutput::m_instance;
 std::once_flag Logger::FileOutput::m_onceFlag;
 
-inline void Logger::FileOutput::Init(const char* filePath)
+void Logger::FileOutput::Init(const char* filePath)
 {
     std::call_once(m_onceFlag,
         [filePath] {
@@ -87,7 +87,7 @@ inline void Logger::FileOutput::Init(const char* filePath)
         });
 }
 
-inline Logger::FileOutput::~FileOutput()
+Logger::FileOutput::~FileOutput()
 {
     m_writer.m_isRunning = false;
     m_writerThread.join();
