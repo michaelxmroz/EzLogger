@@ -2,6 +2,8 @@
 #include <memory>
 #include <string>
 #include <stdexcept>
+#include <fstream>
+#include <mutex>
 
 //This can be your custom string type, as long as it supports .c_str()
 #define EzString std::string
@@ -9,11 +11,14 @@
 //set to 0 if you do not want to include windows.h for the visual studio debug out, or console out
 #define VS_OUT 1
 
+#define DEFAULT_FILE_NAME "log.txt"
+#define FILE_MESSAGE_BUFFER_SIZE 2048
+
 namespace Logger
 {
     namespace Logging_Helpers
     {
-        void MergeFinalMessage(const EzString& prefix, const EzString& message, const EzString& postfix, EzString& finalMessageOut);
+        void MergeFinalMessage(const EzString& prefix, const char* level, const EzString& message, const EzString& postfix, EzString& finalMessageOut);
         void GetFormatedDateTime(EzString& dateTimeOut);
         void VSDebugOut(const char* message);
         void ConsoleOut(const char* message);
@@ -34,6 +39,21 @@ namespace Logger
         }
 #pragma warning( pop )
 
+        //Ringbuffer for multi-threaded writing and single-threaded reading
+        class LocklessRingBuffer
+        {
+        public:
+            LocklessRingBuffer();
+            void Push(const EzString& message);
+            bool PopIfPossible(EzString& messageOut);
+
+        private:
+            std::atomic<bool> m_readable[FILE_MESSAGE_BUFFER_SIZE];
+            EzString m_buffer[FILE_MESSAGE_BUFFER_SIZE];
+
+            std::atomic<unsigned int> m_writeIndex;
+            unsigned int m_readIndex;
+        };
     }
 
 //Enums
@@ -102,9 +122,8 @@ namespace Logger
         template<LogLevel level>
         static void Output(const EzString& prefix, const EzString& message, const EzString& postfix)
         {
-            EzString format, finalMessage;
-            format = Logging_Helpers::string_format("%s: %s",LogLevelToString<level>(), message.c_str());
-            Logging_Helpers::MergeFinalMessage(prefix, format, postfix, finalMessage);
+            EzString finalMessage;
+            Logging_Helpers::MergeFinalMessage(prefix, LogLevelToString<level>(), message.c_str(), postfix, finalMessage);
             Logging_Helpers::VSDebugOut(finalMessage.c_str());
         };
     };
@@ -116,11 +135,60 @@ namespace Logger
         template<LogLevel level>
         static void Output(const EzString& prefix, const EzString& message, const EzString& postfix)
         {
-            EzString format, finalMessage;
-            format = Logging_Helpers::string_format("%s: %s", LogLevelToString<level>(), message.c_str());
-            Logging_Helpers::MergeFinalMessage(prefix, format, postfix, finalMessage);
+            EzString finalMessage;
+            Logging_Helpers::MergeFinalMessage(prefix, LogLevelToString<level>(), message.c_str(), postfix, finalMessage);
             Logging_Helpers::ConsoleOut(finalMessage.c_str());
         };
+    };
+
+    //Singleton thread-safe file writer
+    class FileOutput
+    {
+    public:
+        ~FileOutput();
+
+        static void Init(const char* filePath);
+
+        template<LogLevel level>
+        static void Output(const EzString& prefix, const EzString& message, const EzString& postfix)
+        {
+            if (!m_instance)
+            {
+                Init(DEFAULT_FILE_NAME);
+            }
+
+            EzString finalMessage;
+            Logging_Helpers::MergeFinalMessage(prefix, LogLevelToString<level>(), message.c_str(), postfix, finalMessage);
+
+            m_instance.get()->m_writer.m_buffer.Push(finalMessage);
+        };
+
+    private:
+
+        FileOutput(const char* filePath);
+
+
+        FileOutput& GetInstance()
+        {
+            return *m_instance.get();
+        }
+
+        class Writer
+        {
+        public:
+            Writer() {}
+            void operator()();
+            std::unique_ptr<std::fstream> m_fileHandle;
+            Logging_Helpers::LocklessRingBuffer m_buffer;
+            bool m_isRunning = true;
+        };
+
+
+        Writer m_writer;
+        std::thread m_writerThread;
+
+        static std::unique_ptr<FileOutput> m_instance;
+        static std::once_flag m_onceFlag;
     };
 
 //Logging Boilerplate
@@ -192,7 +260,8 @@ namespace Logger
  //----------------------------------//
     typedef Logger<LogSeverity::All, LogVerbosity::All, VSDebugOutput> VSLogger;
     typedef Logger<LogSeverity::All, LogVerbosity::All, ConsoleOutput> ConsoleLogger;
-    typedef CompoundLogger<VSLogger, ConsoleLogger> DefaultLogger;
+    typedef Logger<LogSeverity::Errors, LogVerbosity::All, FileOutput> FileLogger;
+    typedef CompoundLogger<VSLogger, ConsoleLogger, FileLogger> DefaultLogger;
 }
 
 #define LOG_INFO(message) \
