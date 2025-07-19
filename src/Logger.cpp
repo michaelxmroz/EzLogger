@@ -118,12 +118,12 @@ void Logger::Logging_Helpers::LocklessRingBuffer::Push(const EzString& message)
 {
     unsigned int writeIndex = m_writeIndex.fetch_add(1) % FILE_MESSAGE_BUFFER_SIZE;
 
-    m_buffer[writeIndex] = message;
-    bool oldVal = false;
-    if (!m_readable[writeIndex].compare_exchange_strong(oldVal, true))
+    while (m_readable[writeIndex].load())
     {
-        assert(((void)"File message buffer overflow in logging system. Consider increasing buffer size", false));
+        //busy loop
     }
+    m_buffer[writeIndex] = message;
+    m_readable[writeIndex].store(true);
 }
 
 bool Logger::Logging_Helpers::LocklessRingBuffer::PopIfPossible(EzString& messageOut)
